@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Подписание документа</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        canvas { border: 1px solid #000; margin-top: 10px; }
+        #pdfViewer { width: 100%; height: 600px; border: 1px solid #000; }
+        #signaturePad { display: none; }
+        #downloadLink { display: none; }
+    </style>
+</head>
+<body>
+    <h1>Подписание документа</h1>
+
+    <!-- Выбор и загрузка PDF -->
+    <input type="file" id="pdfInput" accept="application/pdf">
+    <br><br>
+    <div id="pdfViewer"></div>
+
+    <!-- Ссылка для отправки на WhatsApp -->
+    <button id="generateLinkBtn">Создать ссылку для подписанта</button>
+    <br><br>
+    <textarea id="generatedLink" readonly rows="1" cols="50"></textarea>
+    <button onclick="copyLink()">Копировать ссылку</button>
+
+    <!-- Поле для подписания -->
+    <div id="signaturePad">
+        <h3>Подпишите здесь</h3>
+        <canvas id="signatureCanvas" width="500" height="200"></canvas>
+        <br>
+        <button id="clearSignature">Очистить</button>
+        <br><br>
+        <button id="signBtn">Подписать документ</button>
+    </div>
+
+    <!-- Ссылка на скачивание подписанного документа -->
+    <a id="downloadLink" href="#" download="signed_document.pdf">Скачать подписанный документ</a>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+    <script>
+        let pdfDoc, pdfViewer, signaturePad, canvas, ctx, signature;
+
+        // Загрузка и отображение PDF
+        const pdfInput = document.getElementById('pdfInput');
+        const generateLinkBtn = document.getElementById('generateLinkBtn');
+        const generatedLink = document.getElementById('generatedLink');
+        const signatureCanvas = document.getElementById('signatureCanvas');
+        const signBtn = document.getElementById('signBtn');
+        const downloadLink = document.getElementById('downloadLink');
+
+        pdfInput.addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file.type === 'application/pdf') {
+                const reader = new FileReader();
+                reader.onload = function () {
+                    const pdfData = new Uint8Array(this.result);
+                    pdfjsLib.getDocument({ data: pdfData }).promise.then(function (pdfDoc_) {
+                        pdfDoc = pdfDoc_;
+                        renderPage(1);
+                        generateLinkBtn.style.display = 'inline-block';
+                    });
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        });
+
+        function renderPage(pageNumber) {
+            pdfDoc.getPage(pageNumber).then(function (page) {
+                const viewport = page.getViewport({ scale: 1.5 });
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                const renderContext = {
+                    canvasContext: context,
+                    viewport: viewport,
+                };
+                page.render(renderContext).promise.then(function () {
+                    const pdfViewer = document.getElementById('pdfViewer');
+                    pdfViewer.innerHTML = '';
+                    pdfViewer.appendChild(canvas);
+                });
+            });
+        }
+
+        // Создание ссылки для подписанта
+        generateLinkBtn.addEventListener('click', function () {
+            const link = window.location.href;
+            generatedLink.value = link;
+        });
+
+        // Копирование ссылки в буфер
+        function copyLink() {
+            generatedLink.select();
+            document.execCommand("copy");
+            alert('Ссылка скопирована!');
+        }
+
+        // Настройка Canvas для подписи
+        signatureCanvas.addEventListener('mousedown', startSignature);
+        signatureCanvas.addEventListener('mousemove', drawSignature);
+        signatureCanvas.addEventListener('mouseup', endSignature);
+
+        let isSigning = false;
+        function startSignature(e) {
+            isSigning = true;
+            ctx = signatureCanvas.getContext('2d');
+            ctx.beginPath();
+            ctx.moveTo(e.offsetX, e.offsetY);
+        }
+
+        function drawSignature(e) {
+            if (!isSigning) return;
+            ctx.lineTo(e.offsetX, e.offsetY);
+            ctx.stroke();
+        }
+
+        function endSignature() {
+            isSigning = false;
+        }
+
+        // Очистка подписи
+        document.getElementById('clearSignature').addEventListener('click', function () {
+            ctx.clearRect(0, 0, signatureCanvas.width, signatureCanvas.height);
+        });
+
+        // Подпись документа
+        signBtn.addEventListener('click', function () {
+            const imgData = signatureCanvas.toDataURL('image/png');
+            const jsPDF = window.jspdf.jsPDF;
+            const doc = new jsPDF();
+
+            doc.addImage(imgData, 'PNG', 10, 180, 60, 30);
+            doc.text('Подписано:', 10, 200);
+            doc.text(new Date().toLocaleString(), 10, 210);
+
+            doc.save('signed_document.pdf');
+            downloadLink.style.display = 'inline-block';
+            downloadLink.href = doc.output('bloburl');
+        });
+    </script>
+</body>
+</html>
